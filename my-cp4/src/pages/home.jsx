@@ -12,13 +12,18 @@ function Home() {
     fetchCategories();
   }, []);
 
+  const [loading, setLoading] = useState(false);
+
   const fetchCategories = async () => {
+    setLoading(true);
     try {
       const response = await fetch('https://opentdb.com/api_category.php');
       const data = await response.json();
       setCategories(data.trivia_categories);
     } catch (error) {
       console.error('Error fetching categories:', error);
+    } finally {
+      setLoading(false);
     }
   };
 

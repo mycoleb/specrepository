@@ -23,20 +23,27 @@ export const signInWithGithub = () => signInWithPopup(auth, githubProvider);
 export const logOut = () => signOut(auth);
 
 // Score functions
-export const saveScore = async (userId, score, category, difficulty) => {
-  try {
-    const docRef = await addDoc(collection(db, "scores"), {
-      userId,
-      score,
-      category,
-      difficulty,
-      timestamp: new Date().toISOString()
-    });
-    return docRef.id;
-  } catch (error) {
-    console.error("Error saving score:", error);
-    throw error;
-  }
+export const saveScore = async (score, total, category, difficulty) => {
+    if (!auth.currentUser) throw new Error("Must be logged in to save score");
+    if (score < 0 || score > total) throw new Error("Invalid score");
+    
+    try {
+      const scorePercent = Math.round((score / total) * 100);
+      await addDoc(collection(db, "scores"), {
+        userId: auth.currentUser.uid,
+        score: scorePercent,
+        category,
+        difficulty,
+        totalQuestions: total,
+        correctAnswers: score,
+        timestamp: new Date().toISOString(),
+        userDisplayName: auth.currentUser.displayName,
+        userPhotoURL: auth.currentUser.photoURL
+      });
+    } catch (error) {
+      console.error("Error saving score:", error);
+      throw error;
+    }
 };
 
 export const getTopScores = async (limit = 10) => {
@@ -148,27 +155,7 @@ function Results() {
     </div>
   );
 }
-export const saveScore = async (score, total, category, difficulty) => {
-    if (!auth.currentUser) throw new Error("Must be logged in to save score");
-    
-    try {
-      const scorePercent = Math.round((score / total) * 100);
-      await addDoc(collection(db, "scores"), {
-        userId: auth.currentUser.uid,
-        score: scorePercent,
-        category,
-        difficulty,
-        totalQuestions: total,
-        correctAnswers: score,
-        timestamp: new Date().toISOString(),
-        userDisplayName: auth.currentUser.displayName,
-        userPhotoURL: auth.currentUser.photoURL
-      });
-    } catch (error) {
-      console.error("Error saving score:", error);
-      throw error;
-    }
-  };
+
   
   export const getUserStats = async (userId) => {
     try {

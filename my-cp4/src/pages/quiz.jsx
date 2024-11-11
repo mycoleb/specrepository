@@ -12,13 +12,19 @@ function Quiz() {
   const [error, setError] = useState(null);
   const [answering, setAnswering] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
+  const [retryCount, setRetryCount] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchQuestions();
+    return () => {
+      setQuestions([]);
+      setCurrentQuestion(0);
+      setScore(0);
+    };
   }, []);
-
+  
   const fetchQuestions = async () => {
     setLoading(true);
     setError(null);
@@ -27,31 +33,73 @@ function Quiz() {
     let url = 'https://opentdb.com/api.php?amount=10&type=multiple';
     if (category) url += `&category=${category}`;
     if (difficulty) url += `&difficulty=${difficulty}`;
-
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error('Failed to fetch questions');
+  
+    const maxRetries = 3;
+    let attempt = 0;
+    
+    while (attempt < maxRetries) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+  
+        const response = await fetch(url, {
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+  
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.response_code !== 0) {
+          switch (data.response_code) {
+            case 1:
+              throw new Error('No questions found for selected criteria');
+            case 2:
+              throw new Error('Invalid parameter in API request');
+            case 3:
+              throw new Error('Session token not found');
+            case 4:
+              throw new Error('No more questions available');
+            default:
+              throw new Error('Failed to fetch questions');
+          }
+        }
+  
+        if (!data.results || data.results.length === 0) {
+          throw new Error('No questions received from the server');
+        }
+  
+        setQuestions(data.results);
+        setError(null);
+        setRetryCount(0); // Reset retry count on success
+        break; // Success! Exit the retry loop
+  
+      } catch (error) {
+        let errorMessage = error;
+        
+        if (error.name === 'AbortError') {
+          errorMessage = new Error('Request timed out. Server might be busy.');
+        } else if (!navigator.onLine) {
+          errorMessage = new Error('No internet connection. Please check your network.');
+        }
+        
+        if (attempt === maxRetries - 1) {
+          setError(errorMessage);
+          setQuestions([]);
+        } else {
+          attempt++;
+          await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 1000));
+        }
       }
-      
-      const data = await response.json();
-      
-      if (data.response_code !== 0) {
-        throw new Error('No questions available for selected criteria');
-      }
-
-      if (!data.results || data.results.length === 0) {
-        throw new Error('No questions received');
-      }
-
-      setQuestions(data.results);
-    } catch (error) {
-      setError(error.message);
-    } finally {
-      setLoading(false);
     }
+    
+    setLoading(false);
   };
-
+//END OF Fetchquestions!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   const handleAnswer = async (answer) => {
     if (answering) return; // Prevent multiple answers
     setAnswering(true);
@@ -92,11 +140,22 @@ function Quiz() {
     return (
       <div className="max-w-2xl mx-auto mt-10">
         <ErrorMessage 
-          message={error}
-          onRetry={fetchQuestions}
+          error={error}
+          onRetry={async () => {
+            if (retryCount < 3) {
+              setRetryCount(prev => prev + 1);
+              await fetchQuestions();
+            }
+          }}
+          maxRetries={3}
+          retryInterval={3000}
         />
       </div>
     );
+  }
+
+  if (!questions.length) {
+    return <div className="text-center mt-10">No questions available.</div>;
   }
 
   const question = questions[currentQuestion];
